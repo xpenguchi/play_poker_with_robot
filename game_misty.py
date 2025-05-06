@@ -45,6 +45,9 @@ class TexasHoldemGame:
         self.robot_wins = 0
         self.ties = 0
         self.round_results = []
+        # Game seed for reproducibility
+        self.seed = random.randint(0, 1000000)
+        random.seed(self.seed)
         
         # Game components
         self.deck = Deck()
@@ -59,7 +62,7 @@ class TexasHoldemGame:
         
         # Robot behavior variables
         self.robot_is_bluffing = False
-        self.robot_voice_gender = "male"  # Default voice gender
+        self.robot_voice_gender = random.choice(["male", "female"])
         self.deception_type = "expression"
         
         # Misty robot integration
@@ -207,7 +210,8 @@ class TexasHoldemGame:
         hand_setup = get_predetermined_hand_setup(
             self.round_num,
             self.robot_voice_gender,
-            admin_settings
+            admin_settings,
+            self.seed
         )
         
         # Set the cards based on the remote setup

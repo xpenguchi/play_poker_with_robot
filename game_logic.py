@@ -7,7 +7,7 @@ Handles the core game logic with better randomization while still controlling ou
 import random
 from models import Card, GameOutcome
 
-def get_predetermined_hand_setup(round_num, robot_voice_gender, admin_settings=None):
+def get_predetermined_hand_setup(round_num, robot_voice_gender, admin_settings=None, seed=None):
     """
     Creates predetermined hand setups based on desired outcome with more randomization
     
@@ -19,22 +19,39 @@ def get_predetermined_hand_setup(round_num, robot_voice_gender, admin_settings=N
     Returns:
         dict: Setup containing player cards, robot cards, community cards, outcome and robot betting strategy
     """
+    if seed is not None:
+        random.seed(seed)  # Initialize the random seed
+        
     # Use admin settings if provided
     if admin_settings and admin_settings.get('use_admin_settings', False):
         outcome = admin_settings.get('outcome', GameOutcome.PLAYER_WINS)
         robot_betting = admin_settings.get('robot_betting', {"style": "neutral", "amount": 1})
     else:
-        # For simplicity, we'll rotate between three outcomes
-        round_index = (round_num - 1) % 3
-        outcomes = [GameOutcome.PLAYER_WINS, GameOutcome.ROBOT_WINS, GameOutcome.TIE]
-        outcome = outcomes[round_index]
+        round_index = (round_num - 1) % 6
+        # Define the sequence of outcomes for every 6 rounds
+        outcome_sequence = [
+            GameOutcome.PLAYER_WINS, 
+            GameOutcome.ROBOT_WINS, 
+            GameOutcome.TIE,
+            GameOutcome.PLAYER_WINS,
+            GameOutcome.ROBOT_WINS,
+            GameOutcome.TIE
+        ]
+        # Shuffle the outcomes for randomness
+        random.shuffle(outcome_sequence)
+        outcome = outcome_sequence[round_index]
         
-        # Default robot betting strategies
+        # Default robot betting strategies (corresponding to the outcomes)
         betting_strategies = [
             {"style": "aggressive", "amount": 2},  # Player wins scenario
             {"style": "conservative", "amount": 1},  # Robot wins scenario
-            {"style": "neutral", "amount": 1}  # Tie scenario
+            {"style": "neutral", "amount": 1},      # Tie scenario
+            {"style": "aggressive", "amount": 2},  # Player wins scenario
+            {"style": "conservative", "amount": 1},  # Robot wins scenario
+            {"style": "neutral", "amount": 1}       # Tie scenario
         ]
+        # Shuffle the betting strategies for randomness
+        random.shuffle(betting_strategies)
         robot_betting = betting_strategies[round_index]
     
     # Generate random cards with predetermined outcome
