@@ -20,6 +20,15 @@ def save_game_results(results_data, filename=None):
     Returns:
         str: Path to the saved file
     """
+    class GameEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if hasattr(obj, 'name'):
+                return obj.name
+
+            if hasattr(obj, '__dict__'):
+                return obj.__dict__
+            return str(obj)
+        
     # Create results directory if it doesn't exist
     results_dir = Path("results")
     if not results_dir.exists():
@@ -36,8 +45,8 @@ def save_game_results(results_data, filename=None):
     # Save data to file
     file_path = results_dir / filename
     with open(file_path, 'w') as f:
-        json.dump(results_data, f, indent=4)
-    
+        json.dump(results_data, f, indent=4, cls=GameEncoder)
+        
     return str(file_path)
 
 def load_game_results(filename):

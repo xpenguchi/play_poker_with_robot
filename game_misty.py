@@ -2,6 +2,7 @@
 """
 Main Game Class for Texas Hold'em Poker Game with Misty Robot Integration
 Integrates all components and manages the overall game flow, including Misty robot control
+Fixed to properly compare poker hands and handle betting logic
 """
 
 import tkinter as tk
@@ -13,11 +14,333 @@ from PIL import Image, ImageTk, ImageSequence, ImageDraw
 
 from models import Card, Deck, PokerHand, GameOutcome
 from ui_misty import UIManager, CardImageManager
-from admin_panel import AdminPanel
 from questionnaire import PostGameQuestionnaire
-from game_logic import get_predetermined_hand_setup, calculate_robot_bet, get_robot_expression
+from game_logic import get_predetermined_hand_setup, calculate_robot_bet, get_robot_expression, get_robot_message
+from game_logic import get_hand_description, HAND_TYPE_NAMES
 from utils import save_game_results, format_round_data
 from misty_interface import MistyPokerPlayer
+
+def enum_to_str(enum_value):
+    if hasattr(enum_value, 'name'):
+        return enum_value.name
+    return str(enum_value)
+
+def compare_poker_hands(player_cards, robot_cards, community_cards, player_hand_type, robot_hand_type):
+    """
+    Compare two poker hands and determine the winner based on standard poker rules.
+    
+    Args:
+        player_cards (list): List of Card objects for player's hole cards
+        robot_cards (list): List of Card objects for robot's hole cards
+        community_cards (list): List of Card objects for community cards
+        player_hand_type (int): The player's hand type (e.g., ONE_PAIR, TWO_PAIR)
+        robot_hand_type (int): The robot's hand type (e.g., ONE_PAIR, TWO_PAIR)
+        
+    Returns:
+        GameOutcome: PLAYER_WINS, ROBOT_WINS, or TIE
+    """
+    # First compare hand types (higher value is better)
+    if player_hand_type > robot_hand_type:
+        return GameOutcome.PLAYER_WINS
+    elif robot_hand_type > player_hand_type:
+        return GameOutcome.ROBOT_WINS
+    
+    # If hand types are the same, compare based on the specific hand type
+    if player_hand_type == robot_hand_type:
+        # Get all player and robot cards (hole + community)
+        player_all_cards = player_cards + community_cards
+        robot_all_cards = robot_cards + community_cards
+        
+        # For high card - compare highest cards
+        if player_hand_type == 0:  # HIGH_CARD
+            player_values = sorted([14 if c.rank == 1 else c.rank for c in player_all_cards], reverse=True)
+            robot_values = sorted([14 if c.rank == 1 else c.rank for c in robot_all_cards], reverse=True)
+            
+            # Compare each card from highest to lowest
+            for i in range(min(5, len(player_values))):
+                if player_values[i] > robot_values[i]:
+                    return GameOutcome.PLAYER_WINS
+                elif robot_values[i] > player_values[i]:
+                    return GameOutcome.ROBOT_WINS
+                
+        # For one pair - compare pair rank then kickers
+        elif player_hand_type == 1:  # ONE_PAIR
+            # Find player's pair
+            player_ranks = [c.rank for c in player_all_cards]
+            robot_ranks = [c.rank for c in robot_all_cards]
+            
+            player_pair_rank = next((r for r in player_ranks if player_ranks.count(r) >= 2), 0)
+            robot_pair_rank = next((r for r in robot_ranks if robot_ranks.count(r) >= 2), 0)
+            
+            # Adjust for Aces
+            if player_pair_rank == 1: player_pair_rank = 14
+            if robot_pair_rank == 1: robot_pair_rank = 14
+            
+            if player_pair_rank > robot_pair_rank:
+                return GameOutcome.PLAYER_WINS
+            elif robot_pair_rank > player_pair_rank:
+                return GameOutcome.ROBOT_WINS
+                
+            # If pairs are the same, compare kickers
+            player_kickers = sorted([14 if c.rank == 1 else c.rank for c in player_all_cards 
+                                     if c.rank != player_pair_rank], reverse=True)
+            robot_kickers = sorted([14 if c.rank == 1 else c.rank for c in robot_all_cards 
+                                   if c.rank != robot_pair_rank], reverse=True)
+            
+            for i in range(min(3, len(player_kickers), len(robot_kickers))):
+                if player_kickers[i] > robot_kickers[i]:
+                    return GameOutcome.PLAYER_WINS
+                elif robot_kickers[i] > player_kickers[i]:
+                    return GameOutcome.ROBOT_WINS
+        
+        # For two pair - compare higher pair, then lower pair, then kicker
+        elif player_hand_type == 2:  # TWO_PAIR
+            # Find player's pairs
+            player_ranks = [c.rank for c in player_all_cards]
+            robot_ranks = [c.rank for c in robot_all_cards]
+            
+            player_pairs = sorted([r for r in set(player_ranks) if player_ranks.count(r) >= 2], 
+                                  key=lambda x: 14 if x == 1 else x, reverse=True)
+            robot_pairs = sorted([r for r in set(robot_ranks) if robot_ranks.count(r) >= 2],
+                                key=lambda x: 14 if x == 1 else x, reverse=True)
+            
+            # Compare higher pairs
+            player_high_pair = player_pairs[0] if player_pairs else 0
+            robot_high_pair = robot_pairs[0] if robot_pairs else 0
+            player_high_pair = 14 if player_high_pair == 1 else player_high_pair
+            robot_high_pair = 14 if robot_high_pair == 1 else robot_high_pair
+            
+            if player_high_pair > robot_high_pair:
+                return GameOutcome.PLAYER_WINS
+            elif robot_high_pair > player_high_pair:
+                return GameOutcome.ROBOT_WINS
+            
+            # Compare lower pairs
+            if len(player_pairs) > 1 and len(robot_pairs) > 1:
+                player_low_pair = player_pairs[1]
+                robot_low_pair = robot_pairs[1]
+                player_low_pair = 14 if player_low_pair == 1 else player_low_pair
+                robot_low_pair = 14 if robot_low_pair == 1 else robot_low_pair
+                
+                if player_low_pair > robot_low_pair:
+                    return GameOutcome.PLAYER_WINS
+                elif robot_low_pair > player_low_pair:
+                    return GameOutcome.ROBOT_WINS
+            
+            # If both pairs are the same, compare kickers
+            player_kickers = [14 if c.rank == 1 else c.rank for c in player_all_cards 
+                             if c.rank != player_pairs[0] and c.rank != (player_pairs[1] if len(player_pairs) > 1 else -1)]
+            robot_kickers = [14 if c.rank == 1 else c.rank for c in robot_all_cards 
+                            if c.rank != robot_pairs[0] and c.rank != (robot_pairs[1] if len(robot_pairs) > 1 else -1)]
+            
+            player_kicker = max(player_kickers) if player_kickers else 0
+            robot_kicker = max(robot_kickers) if robot_kickers else 0
+            
+            if player_kicker > robot_kicker:
+                return GameOutcome.PLAYER_WINS
+            elif robot_kicker > player_kicker:
+                return GameOutcome.ROBOT_WINS
+        
+        # For three of a kind - compare trips rank then kickers
+        elif player_hand_type == 3:  # THREE_OF_A_KIND
+            # Find player's trips
+            player_ranks = [c.rank for c in player_all_cards]
+            robot_ranks = [c.rank for c in robot_all_cards]
+            
+            player_trips_rank = next((r for r in player_ranks if player_ranks.count(r) >= 3), 0)
+            robot_trips_rank = next((r for r in robot_ranks if robot_ranks.count(r) >= 3), 0)
+            
+            # Adjust for Aces
+            if player_trips_rank == 1: player_trips_rank = 14
+            if robot_trips_rank == 1: robot_trips_rank = 14
+            
+            if player_trips_rank > robot_trips_rank:
+                return GameOutcome.PLAYER_WINS
+            elif robot_trips_rank > player_trips_rank:
+                return GameOutcome.ROBOT_WINS
+                
+            # If trips are the same, compare kickers (very unlikely in Texas Hold'em)
+            player_kickers = sorted([14 if c.rank == 1 else c.rank for c in player_all_cards 
+                                     if c.rank != player_trips_rank], reverse=True)
+            robot_kickers = sorted([14 if c.rank == 1 else c.rank for c in robot_all_cards 
+                                   if c.rank != robot_trips_rank], reverse=True)
+            
+            for i in range(min(2, len(player_kickers), len(robot_kickers))):
+                if player_kickers[i] > robot_kickers[i]:
+                    return GameOutcome.PLAYER_WINS
+                elif robot_kickers[i] > player_kickers[i]:
+                    return GameOutcome.ROBOT_WINS
+        
+        # For straight - compare highest card
+        elif player_hand_type == 4:  # STRAIGHT
+            player_values = sorted([14 if c.rank == 1 else c.rank for c in player_all_cards])
+            robot_values = sorted([14 if c.rank == 1 else c.rank for c in robot_all_cards])
+            
+            # Special case for A-5 straight (where Ace is low)
+            if set([14, 2, 3, 4, 5]).issubset(set(player_values)):
+                player_straight_high = 5
+            else:
+                player_straight_high = max(player_values)
+                
+            if set([14, 2, 3, 4, 5]).issubset(set(robot_values)):
+                robot_straight_high = 5
+            else:
+                robot_straight_high = max(robot_values)
+                
+            if player_straight_high > robot_straight_high:
+                return GameOutcome.PLAYER_WINS
+            elif robot_straight_high > player_straight_high:
+                return GameOutcome.ROBOT_WINS
+        
+        # For flush - compare highest card, then next highest, etc.
+        elif player_hand_type == 5:  # FLUSH
+            # Group cards by suit
+            player_suits = {}
+            robot_suits = {}
+            
+            for card in player_all_cards:
+                if card.suit not in player_suits:
+                    player_suits[card.suit] = []
+                player_suits[card.suit].append(14 if card.rank == 1 else card.rank)
+                
+            for card in robot_all_cards:
+                if card.suit not in robot_suits:
+                    robot_suits[card.suit] = []
+                robot_suits[card.suit].append(14 if card.rank == 1 else card.rank)
+            
+            # Find flush suit
+            player_flush_suit = next((suit for suit, cards in player_suits.items() if len(cards) >= 5), None)
+            robot_flush_suit = next((suit for suit, cards in robot_suits.items() if len(cards) >= 5), None)
+            
+            if player_flush_suit and robot_flush_suit:
+                player_flush = sorted(player_suits[player_flush_suit], reverse=True)[:5]
+                robot_flush = sorted(robot_suits[robot_flush_suit], reverse=True)[:5]
+                
+                for i in range(5):
+                    if player_flush[i] > robot_flush[i]:
+                        return GameOutcome.PLAYER_WINS
+                    elif robot_flush[i] > player_flush[i]:
+                        return GameOutcome.ROBOT_WINS
+        
+        # For full house - compare trips, then pair
+        elif player_hand_type == 6:  # FULL_HOUSE
+            player_ranks = [c.rank for c in player_all_cards]
+            robot_ranks = [c.rank for c in robot_all_cards]
+            
+            # Find trips and pair
+            player_rank_counts = {r: player_ranks.count(r) for r in set(player_ranks)}
+            robot_rank_counts = {r: robot_ranks.count(r) for r in set(robot_ranks)}
+            
+            player_trips = [r for r, count in player_rank_counts.items() if count >= 3]
+            player_pairs = [r for r, count in player_rank_counts.items() if count >= 2]
+            robot_trips = [r for r, count in robot_rank_counts.items() if count >= 3]
+            robot_pairs = [r for r, count in robot_rank_counts.items() if count >= 2]
+            
+            # Compare trips (adjust for Aces)
+            player_trip_rank = max(player_trips, key=lambda x: 14 if x == 1 else x)
+            robot_trip_rank = max(robot_trips, key=lambda x: 14 if x == 1 else x)
+            
+            player_trip_rank = 14 if player_trip_rank == 1 else player_trip_rank
+            robot_trip_rank = 14 if robot_trip_rank == 1 else robot_trip_rank
+            
+            if player_trip_rank > robot_trip_rank:
+                return GameOutcome.PLAYER_WINS
+            elif robot_trip_rank > player_trip_rank:
+                return GameOutcome.ROBOT_WINS
+            
+            # If trips are the same, compare pairs
+            player_pair_candidates = [r for r in player_pairs if r != player_trip_rank]
+            robot_pair_candidates = [r for r in robot_pairs if r != robot_trip_rank]
+            
+            if player_pair_candidates and robot_pair_candidates:
+                player_pair_rank = max(player_pair_candidates, key=lambda x: 14 if x == 1 else x)
+                robot_pair_rank = max(robot_pair_candidates, key=lambda x: 14 if x == 1 else x)
+                
+                player_pair_rank = 14 if player_pair_rank == 1 else player_pair_rank
+                robot_pair_rank = 14 if robot_pair_rank == 1 else robot_pair_rank
+                
+                if player_pair_rank > robot_pair_rank:
+                    return GameOutcome.PLAYER_WINS
+                elif robot_pair_rank > player_pair_rank:
+                    return GameOutcome.ROBOT_WINS
+        
+        # For four of a kind - compare quads, then kicker
+        elif player_hand_type == 7:  # FOUR_OF_A_KIND
+            player_ranks = [c.rank for c in player_all_cards]
+            robot_ranks = [c.rank for c in robot_all_cards]
+            
+            player_quads_rank = next((r for r in player_ranks if player_ranks.count(r) >= 4), 0)
+            robot_quads_rank = next((r for r in robot_ranks if robot_ranks.count(r) >= 4), 0)
+            
+            # Adjust for Aces
+            if player_quads_rank == 1: player_quads_rank = 14
+            if robot_quads_rank == 1: robot_quads_rank = 14
+            
+            if player_quads_rank > robot_quads_rank:
+                return GameOutcome.PLAYER_WINS
+            elif robot_quads_rank > player_quads_rank:
+                return GameOutcome.ROBOT_WINS
+                
+            # If quads are the same, compare kickers
+            player_kicker = max([14 if c.rank == 1 else c.rank for c in player_all_cards 
+                                if c.rank != player_quads_rank])
+            robot_kicker = max([14 if c.rank == 1 else c.rank for c in robot_all_cards 
+                               if c.rank != robot_quads_rank])
+            
+            if player_kicker > robot_kicker:
+                return GameOutcome.PLAYER_WINS
+            elif robot_kicker > player_kicker:
+                return GameOutcome.ROBOT_WINS
+        
+        # For straight flush - compare highest card
+        elif player_hand_type == 8:  # STRAIGHT_FLUSH
+            # Similar to straight comparison but with suit check
+            player_suits = {}
+            robot_suits = {}
+            
+            for card in player_all_cards:
+                if card.suit not in player_suits:
+                    player_suits[card.suit] = []
+                player_suits[card.suit].append(14 if card.rank == 1 else card.rank)
+                
+            for card in robot_all_cards:
+                if card.suit not in robot_suits:
+                    robot_suits[card.suit] = []
+                robot_suits[card.suit].append(14 if card.rank == 1 else card.rank)
+            
+            # Find straight flush
+            player_sf_high = 0
+            robot_sf_high = 0
+            
+            for suit, values in player_suits.items():
+                if len(values) >= 5:
+                    # Check for straight in this suit
+                    values = sorted(set(values))
+                    for i in range(len(values) - 4):
+                        if values[i:i+5] == list(range(values[i], values[i] + 5)):
+                            player_sf_high = max(player_sf_high, values[i] + 4)
+                    # Check for wheel (A-5) straight flush
+                    if set([14, 2, 3, 4, 5]).issubset(set(values)):
+                        player_sf_high = max(player_sf_high, 5)
+            
+            for suit, values in robot_suits.items():
+                if len(values) >= 5:
+                    # Check for straight in this suit
+                    values = sorted(set(values))
+                    for i in range(len(values) - 4):
+                        if values[i:i+5] == list(range(values[i], values[i] + 5)):
+                            robot_sf_high = max(robot_sf_high, values[i] + 4)
+                    # Check for wheel (A-5) straight flush
+                    if set([14, 2, 3, 4, 5]).issubset(set(values)):
+                        robot_sf_high = max(robot_sf_high, 5)
+            
+            if player_sf_high > robot_sf_high:
+                return GameOutcome.PLAYER_WINS
+            elif robot_sf_high > player_sf_high:
+                return GameOutcome.ROBOT_WINS
+    
+    # If we get here, it's a true tie
+    return GameOutcome.TIE
 
 class TexasHoldemGame:
     """Main game class that manages the poker game with Misty integration"""
@@ -56,14 +379,15 @@ class TexasHoldemGame:
         self.robot_hand = None
         self.expected_outcome = None
         
-        # Remote control variables
-        self.admin_mode = False
-        self.robot_betting_strategy = {"style": "neutral", "amount": 1}
-        
         # Robot behavior variables
         self.robot_is_bluffing = False
         self.robot_voice_gender = random.choice(["male", "female"])
-        self.deception_type = "expression"
+        self.robot_betting_strategy = {"style": "neutral", "amount": 1}
+        self.hand_setup = None
+        
+        # Turn-based betting variables
+        self.current_betting_round = 0
+        self.player_has_bet = False
         
         # Misty robot integration
         self.use_misty = use_misty
@@ -83,9 +407,6 @@ class TexasHoldemGame:
         self.ui = UIManager(master, self)
         self.card_manager = CardImageManager(master)
         
-        # Initialize admin panel
-        self.admin_panel = AdminPanel(master, self)
-        
         # Initialize questionnaire
         self.questionnaire = PostGameQuestionnaire(master, self)
         
@@ -100,16 +421,6 @@ class TexasHoldemGame:
         
         # Start the first round after a short delay
         self.master.after(500, self.start_new_round)
-    
-    def toggle_admin_mode(self, event=None):
-        """
-        Toggle the admin control panel visibility (Ctrl+A)
-        
-        Args:
-            event: Key event (not used)
-        """
-        self.admin_mode = not self.admin_mode
-        self.admin_panel.toggle_visibility()
     
     def start_new_round(self):
         """Start a new round of the game"""
@@ -143,33 +454,7 @@ class TexasHoldemGame:
         # Reset the deck and deal new cards
         self.deck.reset()
         
-        # If admin mode is active and next_round_outcome is set, use it
-        # Otherwise use the default rotating pattern
-        if hasattr(self, 'next_round_outcome') and self.admin_mode:
-            self.expected_outcome = self.next_round_outcome
-        else:
-            # Determine the outcome for this round (rotate between outcomes)
-            outcomes = [GameOutcome.PLAYER_WINS, GameOutcome.ROBOT_WINS, GameOutcome.TIE]
-            self.expected_outcome = outcomes[self.round_num % 3]
-        
-        # Set robot's bluffing for this round (50% chance by default)
-        # In the prototype, this is controlled via the admin panel
-        if not hasattr(self, 'robot_is_bluffing') or not self.admin_mode:
-            self.robot_is_bluffing = random.choice([True, False])
-        
-        # Create new round data entry
-        self.current_round_data = {
-            'round_num': self.round_num,
-            'expected_outcome': self.expected_outcome,
-            'robot_bluffed': self.robot_is_bluffing,
-            'player_folded': False,
-            'player_bet_amount': 0,
-            'robot_bet_amount': 0,
-            'robot_voice_gender': self.robot_voice_gender,
-            'player_detected_bluff': False  # Will be updated after the round
-        }
-        
-        # Deal cards according to the expected outcome
+        # Deal cards according to the predetermined hand setup
         self.deal_predetermined_hand()
         
         # Show player cards and hidden robot cards
@@ -190,38 +475,53 @@ class TexasHoldemGame:
                 self.misty.set_hand_quality("average")
             
             self.misty.set_bluffing(self.robot_is_bluffing)
+            
+            # Have Misty say something about its hand based on bluffing status
+            robot_message = get_robot_message(self.hand_setup, self.robot_is_bluffing)
+            self.misty.misty.say_text(robot_message)
         
-        # Set up betting controls
+        # Create new round data entry
+        self.current_round_data = {
+            'round_num': self.round_num,
+            'expected_outcome': self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome),
+            'robot_bluffed': self.robot_is_bluffing,
+            'player_folded': False,
+            'player_bet_amount': 0,
+            'robot_bet_amount': 0,
+            'robot_voice_gender': self.robot_voice_gender,
+            'player_detected_bluff': False
+        }
+        
+        # Set up betting controls for turn-based play
+        self.ui.reset_betting_controls()
         self.ui.enable_betting_controls()
-        self.ui.status_label.config(text="Your turn to bet")
+        self.ui.status_label.config(text="Your turn to bet. You can check (0) or bet.")
         self.ui.next_round_button.config(state=tk.DISABLED)
+        
+        # Initialize the betting phase
+        self.current_betting_round = 1
+        self.player_has_bet = False
     
     def deal_predetermined_hand(self):
         """Deal cards that will result in the expected outcome"""
-        # Get the predetermined setup from the "backend"
-        admin_settings = None
-        if self.admin_mode:
-            admin_settings = {
-                'use_admin_settings': True,
-                'outcome': self.expected_outcome,
-                'robot_betting': self.robot_betting_strategy
-            }
-        
-        hand_setup = get_predetermined_hand_setup(
+        # Get the predetermined setup from the new handler
+        self.hand_setup = get_predetermined_hand_setup(
             self.round_num,
             self.robot_voice_gender,
-            admin_settings,
             self.seed
         )
         
-        # Set the cards based on the remote setup
-        self.player_hand = PokerHand(hand_setup["player_cards"])
-        self.robot_hand = PokerHand(hand_setup["robot_cards"])
-        self.community_cards = hand_setup["community_cards"]
-        self.expected_outcome = hand_setup["outcome"]
+        # Set the cards based on the setup
+        self.player_hand = PokerHand(self.hand_setup["player_cards"])
+        self.robot_hand = PokerHand(self.hand_setup["robot_cards"])
+        self.community_cards = self.hand_setup["community_cards"]
+        self.expected_outcome = self.hand_setup["outcome"]
         
-        # This would also set the robot's betting strategy
-        self.robot_betting_strategy = hand_setup["robot_betting"]
+        # Set robot's betting strategy
+        self.robot_betting_strategy = self.hand_setup["robot_betting"]
+        
+        # Set robot's bluffing status
+        self.robot_is_bluffing = self.hand_setup["robot_is_bluffing"]
         
         # Show community cards
         self.show_community_cards()
@@ -259,28 +559,21 @@ class TexasHoldemGame:
     
     def show_robot_deception(self):
         """Show deceptive cues from the robot"""
-        # Determine the type of deception to show
-        deception_type = getattr(self, 'deception_type', random.choice(['expression', 'verbal', 'both']))
-        
         # Update robot's expression based on its hand and whether it's bluffing
-        if deception_type in ['expression', 'both']:
-            # Get appropriate expression based on bluffing status and expected outcome
-            expression = get_robot_expression(self.expected_outcome, self.robot_is_bluffing)
-            self.ui.robot_expression_label.config(text=expression)
+        expression = get_robot_expression(self.expected_outcome, self.robot_is_bluffing)
+        self.ui.robot_expression_label.config(text=expression)
         
-        # Add verbal deception if applicable
-        if deception_type in ['verbal', 'both']:
-            if self.expected_outcome == GameOutcome.ROBOT_WINS:
-                # Robot has good cards but pretends they're bad
-                self.ui.status_label.config(text="Robot looks at its cards and sighs.")
-            else:
-                # Robot has bad/average cards but pretends they're good
-                self.ui.status_label.config(text="Robot looks at its cards and seems confident.")
+        # Display verbal deception
+        if self.expected_outcome == GameOutcome.ROBOT_WINS and self.robot_is_bluffing:
+            # Robot has good cards but pretends they're bad
+            self.ui.status_label.config(text="Robot looks at its cards and sighs.")
+        elif self.expected_outcome != GameOutcome.ROBOT_WINS and self.robot_is_bluffing:
+            # Robot has bad/average cards but pretends they're good
+            self.ui.status_label.config(text="Robot looks at its cards and seems confident.")
     
     def player_fold(self):
         """Handle player's decision to fold"""
         self.ui.disable_betting_controls()
-        self.ui.status_label.config(text="You folded. Robot wins this round.")
         
         # Update round data
         if hasattr(self, 'current_round_data'):
@@ -289,11 +582,15 @@ class TexasHoldemGame:
             # If robot was bluffing and player folded, player was deceived
             if self.robot_is_bluffing and self.expected_outcome != GameOutcome.ROBOT_WINS:
                 self.current_round_data['player_detected_bluff'] = False
+
+            if not isinstance(self.current_round_data['expected_outcome'], str):
+                self.current_round_data['expected_outcome'] = self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome)
             
             # Save the round data
             self.round_data.append(self.current_round_data)
         
-# Robot wins the pot
+        # Robot wins the pot
+        self.robot_chips += self.current_pot
         self.round_results.append(False)  # Player lost
         self.robot_wins += 1
         
@@ -304,8 +601,36 @@ class TexasHoldemGame:
         # Show robot's cards
         self.show_robot_cards_revealed()
         
+        # Get hand descriptions for display
+        player_hand_type = self.hand_setup.get("player_hand_type", 0)
+        robot_hand_type = self.hand_setup.get("robot_hand_type", 0)
+        player_hand_desc = get_hand_description(player_hand_type, self.player_hand.cards + self.community_cards)
+        robot_hand_desc = get_hand_description(robot_hand_type, self.robot_hand.cards + self.community_cards)
+        
+        # Update status with hand types
+        self.ui.status_label.config(
+            text=f"You folded. Robot wins this round.\nYour hand: {player_hand_desc} ({HAND_TYPE_NAMES[player_hand_type]})\nRobot's hand: {robot_hand_desc} ({HAND_TYPE_NAMES[robot_hand_type]})"
+        )
+        
+        # Update UI labels
+        self.current_pot = 0
+        self.ui.update_labels()
+        
         # Enable next round button
         self.ui.next_round_button.config(state=tk.NORMAL)
+    
+    def player_check(self):
+        """Handle player's decision to check (bet 0)"""
+        # Player checks (bets 0)
+        self.ui.disable_betting_controls()
+        self.ui.status_label.config(text="You checked. Robot is thinking...")
+        
+        # Update round data if needed
+        if hasattr(self, 'current_round_data'):
+            self.current_round_data['player_bet_amount'] = 0
+        
+        # Let the robot respond
+        self.robot_turn_to_bet(0)
     
     def player_bet(self, amount):
         """
@@ -329,21 +654,31 @@ class TexasHoldemGame:
         
         self.ui.status_label.config(text=f"You bet {amount} chip(s). Robot is thinking...")
         
-        # Simulate robot thinking - with actual Misty thinking animation if connected
+        # Now it's the robot's turn to respond
+        self.robot_turn_to_bet(amount)
+    
+    def robot_turn_to_bet(self, player_amount):
+        """
+        Handle the robot's turn to bet after the player's action
+        
+        Args:
+            player_amount (int): The player's bet amount
+        """
+        # Simulate robot thinking with Misty
         if self.use_misty and self.misty and self.misty.misty.connected:
             # Start Misty's thinking in a separate thread
             thinking_thread = threading.Thread(target=self.misty.handle_betting_turn)
             thinking_thread.start()
             
             # Wait a bit longer for Misty to finish its actions
-            self.master.after(3000, lambda: self.robot_bet(amount))
+            self.master.after(3000, lambda: self.robot_bet(player_amount))
         else:
             # Standard delay if no Misty
-            self.master.after(1500, lambda: self.robot_bet(amount))
+            self.master.after(1500, lambda: self.robot_bet(player_amount))
     
     def robot_bet(self, player_amount):
         """
-        Handle robot's betting decision based on strategy
+        Handle robot's betting decision with proper calling options
         
         Args:
             player_amount (int): The player's bet amount
@@ -367,23 +702,103 @@ class TexasHoldemGame:
         self.ui.update_labels()
         
         # Show robot's action
-        self.ui.status_label.config(text=f"{message} Amount: {robot_amount} chip(s).")
+        if robot_amount == 0 and player_amount == 0:
+            self.ui.status_label.config(text="Robot checks.")
+        elif robot_amount == player_amount:
+            self.ui.status_label.config(text=f"{message} Amount: {robot_amount} chip(s).")
+        elif robot_amount > player_amount:
+            self.ui.status_label.config(text=f"{message} Raises to {robot_amount} chip(s).")
         
         # Update robot expression based on deception status
         expression = get_robot_expression(self.expected_outcome, self.robot_is_bluffing)
         self.ui.robot_expression_label.config(text=expression)
         
+        # Check if more betting rounds are needed
+        if robot_amount > player_amount:
+            # Robot raised, player needs to call or fold
+            self.ui.status_label.config(text=f"{message} Raises to {robot_amount} chip(s). You need to call or fold.")
+            self.handle_robot_raise(robot_amount - player_amount)
+        else:
+            # Betting is complete, show cards and resolve
+            self.master.after(1000, self.show_cards_and_resolve)
+    
+    def handle_robot_raise(self, raise_amount):
+        """
+        Improved function to handle when the robot raises the bet
+        
+        Args:
+            raise_amount (int): The amount the robot raised beyond the player's bet
+        """
+        # Clear existing buttons except fold
+        for widget in self.ui.betting_frame.winfo_children():
+            if widget != self.ui.fold_button:
+                widget.destroy()
+        
+        # Create a call button with the correct call amount
+        call_button = tk.Button(
+            self.ui.betting_frame,
+            text=f"Call {raise_amount}",
+            font=self.ui.button_font,
+            command=lambda: self.player_call(raise_amount)
+        )
+        
+        # Enable fold button and add the call button
+        self.ui.fold_button.config(state=tk.NORMAL)
+        call_button.pack(side=tk.LEFT, padx=5)
+
+    def player_call(self, amount):
+        """
+        Handle player's decision to call the robot's raise
+        
+        Args:
+            amount (int): The amount to call
+        """
+        if amount > self.player_chips:
+            amount = self.player_chips  # All-in
+        
+        self.ui.disable_betting_controls()
+        self.player_chips -= amount
+        self.current_pot += amount
+        self.ui.update_labels()
+        
+        # Update round data
+        if hasattr(self, 'current_round_data'):
+            self.current_round_data['player_bet_amount'] += amount
+        
+        self.ui.status_label.config(text=f"You called with {amount} chip(s).")
+        
+        # Show cards and resolve the round
+        self.master.after(1000, self.show_cards_and_resolve)
+    
+    def show_cards_and_resolve(self):
+        """Show cards and resolve the round"""
         # Reveal robot's cards
         self.show_robot_cards_revealed()
         
-        # Resolve the round after a delay
-        self.master.after(1500, self.resolve_round)
+        # Resolve the round after a short delay
+        self.master.after(1000, self.resolve_round)
     
     def resolve_round(self):
-        """Determine the winner and update chips"""
+        """Determine the winner based on actual hand comparison and update chips"""
+        # First, get the actual outcome based on correct poker hand comparison
+        actual_outcome = compare_poker_hands(
+            self.player_hand.cards,
+            self.robot_hand.cards,
+            self.community_cards,
+            self.hand_setup.get("player_hand_type", 0),
+            self.hand_setup.get("robot_hand_type", 0)
+        )
+        
+        # Get hand types and descriptions for display
+        player_hand_type = self.hand_setup.get("player_hand_type", 0)
+        robot_hand_type = self.hand_setup.get("robot_hand_type", 0)
+        player_hand_desc = get_hand_description(player_hand_type, self.player_hand.cards + self.community_cards)
+        robot_hand_desc = get_hand_description(robot_hand_type, self.robot_hand.cards + self.community_cards)
+        
         result_message = ""
         
-        if self.expected_outcome == GameOutcome.PLAYER_WINS:
+        # Use the ACTUAL outcome instead of the predetermined one
+        if actual_outcome == GameOutcome.PLAYER_WINS:
             result_message = "You win this round!"
             self.player_chips += self.current_pot
             self.round_results.append(True)  # Player won
@@ -398,7 +813,7 @@ class TexasHoldemGame:
                 if self.robot_is_bluffing and self.expected_outcome != GameOutcome.ROBOT_WINS:
                     self.current_round_data['player_detected_bluff'] = True
         
-        elif self.expected_outcome == GameOutcome.ROBOT_WINS:
+        elif actual_outcome == GameOutcome.ROBOT_WINS:
             result_message = "Robot wins this round!"
             self.robot_chips += self.current_pot
             self.round_results.append(False)  # Player lost
@@ -428,28 +843,37 @@ class TexasHoldemGame:
             if self.use_misty and self.misty and self.misty.misty.connected:
                 threading.Thread(target=self.misty.handle_tie).start()
         
-        # Save round data for analysis
+        # Save round data for analysis - with modification for the research study
+        # (using actual outcome for gameplay but tracking predetermined outcome for research)
         if hasattr(self, 'current_round_data'):
+            # Add both outcomes to the data for later analysis - use strings instead of enum
+            self.current_round_data['actual_outcome'] = actual_outcome.name if hasattr(actual_outcome, 'name') else str(actual_outcome)
+            # Make sure predetermined_outcome is already a string (in case it wasn't converted in start_new_round)
+            if 'predetermined_outcome' not in self.current_round_data or not isinstance(self.current_round_data['predetermined_outcome'], str):
+                self.current_round_data['predetermined_outcome'] = self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome)
             self.round_data.append(self.current_round_data)
         
         self.current_pot = 0
         self.ui.update_labels()
         
-        # Show result and hand comparison
-        player_hand_str = str(self.player_hand)
-        robot_hand_str = str(self.robot_hand)
+        # Show result and hand comparison with hand types
+        player_hand_type_name = HAND_TYPE_NAMES[player_hand_type]
+        robot_hand_type_name = HAND_TYPE_NAMES[robot_hand_type]
         
         # Add information about robot's bluffing
         bluff_message = ""
         if hasattr(self, 'robot_is_bluffing') and self.robot_is_bluffing:
-            if self.expected_outcome == GameOutcome.ROBOT_WINS:
+            if actual_outcome == GameOutcome.ROBOT_WINS:
                 bluff_message = "The robot was bluffing by hiding its strong hand!"
             else:
                 bluff_message = "The robot was bluffing by pretending to have a strong hand!"
         
         self.ui.status_label.config(
-            text=f"{result_message}\nYour hand: {player_hand_str}\nRobot's hand: {robot_hand_str}\n{bluff_message}"
+            text=f"{result_message}\nYour hand: {player_hand_desc} ({player_hand_type_name})\nRobot's hand: {robot_hand_desc} ({robot_hand_type_name})\n{bluff_message}"
         )
+        
+        # Reset betting UI to standard buttons
+        self.ui.reset_betting_controls()
         
         # Check if we need to switch voice gender (research proposal design)
         if self.round_num == self.max_rounds // 2:  # After half the rounds
@@ -634,8 +1058,8 @@ class TexasHoldemGame:
         self.round_results = []
         self.round_data = []
         
-        # Reset robot voice to default
-        self.robot_voice_gender = "male"  # Start with male voice
+        # Reset robot voice to random starting voice
+        self.robot_voice_gender = random.choice(["male", "female"])
         if hasattr(self, 'voice_switched'):
             delattr(self, 'voice_switched')
         
@@ -649,25 +1073,11 @@ class TexasHoldemGame:
         self.ui.results_label.config(text="")
         self.ui.robot_voice_label.config(text=f"Robot Voice: {self.robot_voice_gender.capitalize()}")
         
-        # Clear card displays
-        for label in self.ui.community_card_labels + self.ui.player_card_labels + self.ui.robot_card_labels:
-            label.config(image="")
-            label.image = None
+        # Start a new round
+        self.master.after(500, self.start_new_round)
         
-        # Update UI
-        self.ui.update_labels()
-        
-        # Start new round
-        self.start_new_round()
-    
     def cleanup(self):
-        """Clean up resources when closing the game"""
-        # Clean up Misty if connected
-        if self.use_misty and self.misty and self.misty.misty.connected:
-            try:
-                self.misty.cleanup()
-                print("Successfully disconnected from Misty robot.")
-            except Exception as e:
-                print(f"Error disconnecting from Misty: {e}")
-        
-        # Other cleanup tasks can be added here
+        """Clean up resources when the game is closed"""
+        # Disconnect from Misty if connected
+        if self.use_misty and self.misty and hasattr(self.misty, 'cleanup'):
+            self.misty.cleanup()

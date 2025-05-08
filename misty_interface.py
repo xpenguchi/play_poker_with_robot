@@ -54,13 +54,17 @@ class MistyInterface:
             bool: Whether the connection was successful
         """
         try:
-            # Test connection by getting Misty's system info
-            response = requests.get(f"{self.base_url}/system/info")
+            print(f"Attempting to connect to Misty at {self.ip_address}")
+            url = f"http://{self.ip_address}/api/device"
+            print(f"API URL: {url}")
+            response = requests.get(url)
+            print(f"Status code: {response.status_code}")
+            print(f"Response content: {response.text}")
+            
             if response.status_code == 200:
                 self.connected = True
                 print(f"Successfully connected to Misty at {self.ip_address}")
                 
-                # Set initial state
                 self.set_expression(MistyExpression.NEUTRAL)
                 return True
             else:

@@ -48,9 +48,11 @@ class UIManager:
         
         # Control buttons
         self.fold_button = None
+        self.check_button = None
         self.bet_button = None
         self.bet2_button = None
         self.next_round_button = None
+        self.betting_frame = None
         
         # Create the UI layout
         self.setup_ui()
@@ -61,9 +63,6 @@ class UIManager:
         self.master.title("Simplified Texas Hold'em with Misty")
         self.master.geometry("800x600")
         self.master.configure(bg="#076324")  # Poker table green
-        
-        # Add keyboard shortcut for admin panel
-        self.master.bind('<Control-a>', self.game.toggle_admin_mode)
         
         # Main header with round information
         self.round_label = tk.Label(
@@ -283,6 +282,7 @@ class UIManager:
         """Create the betting control buttons"""
         betting_frame = tk.Frame(self.master, bg="#076324")
         betting_frame.pack(pady=10)
+        self.betting_frame = betting_frame  # Store reference for later modifications
         
         self.fold_button = tk.Button(
             betting_frame, 
@@ -292,6 +292,15 @@ class UIManager:
             state=tk.DISABLED
         )
         self.fold_button.pack(side=tk.LEFT, padx=5)
+        
+        self.check_button = tk.Button(
+            betting_frame, 
+            text="Check", 
+            font=self.button_font,
+            command=self.game.player_check,
+            state=tk.DISABLED
+        )
+        self.check_button.pack(side=tk.LEFT, padx=5)
         
         self.bet_button = tk.Button(
             betting_frame, 
@@ -311,17 +320,62 @@ class UIManager:
         )
         self.bet2_button.pack(side=tk.LEFT, padx=5)
     
+    def reset_betting_controls(self):
+        """Reset betting controls to their default state"""
+        # Clear all existing buttons first
+        for widget in self.betting_frame.winfo_children():
+            widget.destroy()
+            
+        # Recreate the default buttons
+        self.fold_button = tk.Button(
+            self.betting_frame, 
+            text="Fold", 
+            font=self.button_font,
+            command=self.game.player_fold,
+            state=tk.DISABLED
+        )
+        self.fold_button.pack(side=tk.LEFT, padx=5)
+        
+        self.check_button = tk.Button(
+            self.betting_frame, 
+            text="Check", 
+            font=self.button_font,
+            command=self.game.player_check,
+            state=tk.DISABLED
+        )
+        self.check_button.pack(side=tk.LEFT, padx=5)
+        
+        self.bet_button = tk.Button(
+            self.betting_frame, 
+            text="Bet 1", 
+            font=self.button_font,
+            command=lambda: self.game.player_bet(1),
+            state=tk.DISABLED
+        )
+        self.bet_button.pack(side=tk.LEFT, padx=5)
+        
+        self.bet2_button = tk.Button(
+            self.betting_frame, 
+            text="Bet 2", 
+            font=self.button_font,
+            command=lambda: self.game.player_bet(2),
+            state=tk.DISABLED
+        )
+        self.bet2_button.pack(side=tk.LEFT, padx=5)
+    
     def enable_betting_controls(self):
         """Enable the betting control buttons"""
-        self.fold_button.config(state=tk.NORMAL)
-        self.bet_button.config(state=tk.NORMAL)
-        self.bet2_button.config(state=tk.NORMAL)
+        # Find and enable all buttons in the betting frame
+        for widget in self.betting_frame.winfo_children():
+            if isinstance(widget, tk.Button):
+                widget.config(state=tk.NORMAL)
     
     def disable_betting_controls(self):
         """Disable the betting control buttons"""
-        self.fold_button.config(state=tk.DISABLED)
-        self.bet_button.config(state=tk.DISABLED)
-        self.bet2_button.config(state=tk.DISABLED)
+        # Find and disable all buttons in the betting frame
+        for widget in self.betting_frame.winfo_children():
+            if isinstance(widget, tk.Button):
+                widget.config(state=tk.DISABLED)
     
     def update_labels(self):
         """Update all UI labels with current game state"""
@@ -335,11 +389,11 @@ class UIManager:
         results_text = "Results: "
         for i, result in enumerate(self.game.round_results):
             if result is True:
-                results_text += "✓ "  # Win
+                results_text += "✅ "  # Win
             elif result is False:
-                results_text += "✗ "  # Loss
+                results_text += "❌ "  # Loss
             else:
-                results_text += "= "  # Tie
+                results_text += "🟰 "  # Tie
         
         self.results_label.config(text=results_text)
     

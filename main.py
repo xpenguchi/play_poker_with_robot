@@ -16,7 +16,7 @@ def main():
     # Set up command line argument parsing
     parser = argparse.ArgumentParser(description='Texas Hold\'em Poker Game with optional Misty Robot integration')
     parser.add_argument('--misty', action='store_true', help='Enable Misty robot integration')
-    parser.add_argument('--ip', type=str, default='192.168.1.100', help='IP address of the Misty robot')
+    parser.add_argument('--ip', type=str, default='192.168.0.137', help='IP address of the Misty robot')
     parser.add_argument('--chips', type=int, default=6, help='Initial number of chips for each player')
     args = parser.parse_args()
     
