@@ -5,3 +5,7 @@ results/
 # Ignore all files in SDK files
 Python-SDK/
 **/Python-SDK/
+
+# Ignore all files in __pycache__
+__pycache__/
+**/__pycache__/
