@@ -345,7 +345,7 @@ def compare_poker_hands(player_cards, robot_cards, community_cards, player_hand_
 class TexasHoldemGame:
     """Main game class that manages the poker game with Misty integration"""
     
-    def __init__(self, master, initial_chips=12, use_misty=True, misty_ip="192.168.1.100"):
+    def __init__(self, master, initial_chips=12, use_misty=True, misty_ip="192.168.1.100", robot_voice="random"):
         """
         Initialize the game
         
@@ -381,7 +381,10 @@ class TexasHoldemGame:
         
         # Robot behavior variables
         self.robot_is_bluffing = False
-        self.robot_voice_gender = random.choice(["male", "female"])
+        if robot_voice == "random":
+            self.robot_voice_gender = random.choice(["male", "female"])
+        else:
+            self.robot_voice_gender = robot_voice
         self.robot_betting_strategy = {"style": "neutral", "amount": 1}
         self.hand_setup = None
         
@@ -399,6 +402,8 @@ class TexasHoldemGame:
                 if not self.misty.misty.connected:
                     print("Failed to connect to Misty robot. Continuing without physical robot.")
                     self.use_misty = False
+                else:
+                    self.misty.set_voice_gender(self.robot_voice_gender)
             except Exception as e:
                 print(f"Error initializing Misty robot: {e}. Continuing without physical robot.")
                 self.use_misty = False
@@ -499,6 +504,35 @@ class TexasHoldemGame:
         self.ui.next_round_button.config(state=tk.DISABLED)
         
         # Initialize the betting phase
+        self.current_betting_round = 1
+        self.player_has_bet = False
+
+        self.ui.reset_betting_controls()
+        
+        # Set up the thinking time countdown and disable betting controls
+        self.ui.status_label.config(text="Thinking time: 5 seconds... Please observe the cards carefully.")
+        self.ui.disable_betting_controls()
+        self.ui.next_round_button.config(state=tk.DISABLED)
+        
+        # Use a countdown timer for the thinking time
+        self.thinking_time = 5
+        self.update_thinking_countdown()
+
+    def update_thinking_countdown(self):
+        """Update the countdown for the thinking time"""
+        if self.thinking_time > 0:
+            self.ui.status_label.config(text=f"Thinking time: {self.thinking_time} seconds... Please observe the cards carefully.")
+            self.thinking_time -= 1
+            self.master.after(1000, self.update_thinking_countdown)
+        else:
+            self.enable_betting_after_thinking()
+
+    def enable_betting_after_thinking(self):
+        """Enable betting controls after thinking time is over"""
+        self.ui.enable_betting_controls()
+        self.ui.status_label.config(text="Your turn to bet. You can check (0) or bet.")
+        self.ui.next_round_button.config(state=tk.DISABLED)
+        
         self.current_betting_round = 1
         self.player_has_bet = False
     
@@ -875,79 +909,67 @@ class TexasHoldemGame:
         # Reset betting UI to standard buttons
         self.ui.reset_betting_controls()
         
-        # Check if we need to switch voice gender (research proposal design)
-        if self.round_num == self.max_rounds // 2:  # After half the rounds
-            set_complete = True
-            for result in self.round_results:
-                if result is None:  # If any round hasn't been played
-                    set_complete = False
-                    break
-            
-            if set_complete and not hasattr(self, 'voice_switched'):
-                self.voice_switched = True
-                self.master.after(1000, self.alternate_voice_gender)
-        
         # Enable next round button
         self.ui.next_round_button.config(state=tk.NORMAL)
     
-    def alternate_voice_gender(self):
-        """Alternate the robot's voice gender (as per the research proposal)"""
-        # Switch voice gender
-        self.robot_voice_gender = "female" if self.robot_voice_gender == "male" else "male"
+    # def alternate_voice_gender(self):
+    #     """Alternate the robot's voice gender (as per the research proposal)"""
+    #     # Switch voice gender
+    #     self.robot_voice_gender = "female" if self.robot_voice_gender == "male" else "male"
         
-        # Update display
-        self.ui.robot_voice_label.config(text=f"Robot Voice: {self.robot_voice_gender.capitalize()}")
+    #     # Update display
+    #     self.ui.robot_voice_label.config(text=f"Robot Voice: {self.robot_voice_gender.capitalize()}")
         
-        # Update Misty if connected
-        if self.use_misty and self.misty and self.misty.misty.connected:
-            self.misty.set_voice_gender(self.robot_voice_gender)
+    #     # Update Misty if connected
+    #     if self.use_misty and self.misty and self.misty.misty.connected:
+    #         self.misty.set_voice_gender(self.robot_voice_gender)
         
-        # Show a message about the change
-        self.ui.status_label.config(
-            text=f"The robot's voice has changed to {self.robot_voice_gender}. Taking a short break before continuing..."
-        )
+    #     # Show a message about the change
+    #     self.ui.status_label.config(
+    #         text=f"The robot's voice has changed to {self.robot_voice_gender}. Taking a short break before continuing..."
+    #     )
         
-        # Disable all buttons during the break
-        self.ui.disable_betting_controls()
-        self.ui.next_round_button.config(state=tk.DISABLED)
+    #     # Disable all buttons during the break
+    #     self.ui.disable_betting_controls()
+    #     self.ui.next_round_button.config(state=tk.DISABLED)
         
-        # Create a break message in a popup
-        break_window = tk.Toplevel(self.master)
-        break_window.title("Break Between Sets")
-        break_window.geometry("400x200")
-        break_window.configure(bg="white")
+    #     # Create a break message in a popup
+    #     break_window = tk.Toplevel(self.master)
+    #     break_window.title("Break Between Sets")
+    #     break_window.geometry("400x200")
+    #     break_window.configure(bg="white")
         
-        tk.Label(
-            break_window,
-            text="Break Between Sets",
-            font=("Arial", 16, "bold"),
-            bg="white"
-        ).pack(pady=10)
+    #     tk.Label(
+    #         break_window,
+    #         text="Break Between Sets",
+    #         font=("Arial", 16, "bold"),
+    #         bg="white"
+    #     ).pack(pady=10)
         
-        tk.Label(
-            break_window,
-            text=f"You've completed the first set of rounds.\n\nThe robot's voice has been changed to {self.robot_voice_gender}.\n\nPlease take a short break before continuing with the next set.",
-            font=("Arial", 12),
-            bg="white",
-            wraplength=350
-        ).pack(pady=20)
+    #     tk.Label(
+    #         break_window,
+    #         text=f"You've completed the first set of rounds.\n\nThe robot's voice has been changed to {self.robot_voice_gender}.\n\nPlease take a short break before continuing with the next set.",
+    #         font=("Arial", 12),
+    #         bg="white",
+    #         wraplength=350
+    #     ).pack(pady=20)
         
-        def close_break():
-            break_window.destroy()
-            self.ui.next_round_button.config(state=tk.NORMAL)
+    #     def close_break():
+    #         break_window.destroy()
+    #         self.ui.next_round_button.config(state=tk.NORMAL)
         
-        tk.Button(
-            break_window,
-            text="Continue",
-            font=("Arial", 12, "bold"),
-            command=close_break
-        ).pack(pady=10)
+    #     tk.Button(
+    #         break_window,
+    #         text="Continue",
+    #         font=("Arial", 12, "bold"),
+    #         command=close_break
+    #     ).pack(pady=10)
         
-        # Have Misty announce the voice change if connected
-        if self.use_misty and self.misty and self.misty.misty.connected:
-            self.misty.misty.say_text(
-                f"We are changing to a {self.robot_voice_gender} voice for the next set of rounds."
-            )
+    #     # Have Misty announce the voice change if connected
+    #     if self.use_misty and self.misty and self.misty.misty.connected:
+    #         self.misty.misty.say_text(
+    #             f"We are changing to a {self.robot_voice_gender} voice for the next set of rounds."
+    #         )
     
     def end_game(self):
         """End the game and show final results"""
@@ -1058,10 +1080,8 @@ class TexasHoldemGame:
         self.round_results = []
         self.round_data = []
         
-        # Reset robot voice to random starting voice
-        self.robot_voice_gender = random.choice(["male", "female"])
-        if hasattr(self, 'voice_switched'):
-            delattr(self, 'voice_switched')
+        # if hasattr(self, 'voice_switched'):
+        #     delattr(self, 'voice_switched')
         
         # Update Misty if connected
         if self.use_misty and self.misty and self.misty.misty.connected:

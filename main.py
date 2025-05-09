@@ -18,6 +18,8 @@ def main():
     parser.add_argument('--misty', action='store_true', help='Enable Misty robot integration')
     parser.add_argument('--ip', type=str, default='192.168.0.137', help='IP address of the Misty robot')
     parser.add_argument('--chips', type=int, default=6, help='Initial number of chips for each player')
+    parser.add_argument('--voice', type=str, choices=['male', 'female'], default='random', 
+                  help='Robot voice gender (male/female). Defaults to random selection.')
     args = parser.parse_args()
     
     # Initialize the Tkinter window
@@ -28,7 +30,8 @@ def main():
         root, 
         initial_chips=args.chips,
         use_misty=args.misty,
-        misty_ip=args.ip
+        misty_ip=args.ip,
+        robot_voice=args.voice
     )
     
     # Set up window close handler to ensure proper cleanup

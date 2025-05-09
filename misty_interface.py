@@ -23,8 +23,8 @@ class MistyExpression(Enum):
 
 class MistyVoiceGender(Enum):
     """Enum for Misty's voice gender"""
-    MALE = "en-US-Guy24kRUS"  # Male voice option
-    FEMALE = "en-US-JessaRUS"  # Female voice option
+    MALE = "en-US-Chirp-HD-D"  # Male voice option
+    FEMALE = "en-US-Chirp-HD-F"  # Female voice option
 
 class MistyInterface:
     """Interface for controlling the Misty robot"""
