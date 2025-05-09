@@ -1,79 +1,109 @@
-# Texas Hold'em Poker Research Game
+# Texas Hold'em Poker Game with Misty Robot Integration
 
-## Project Overview
-This application implements a simplified version of Texas Hold'em poker designed for research on how robot voice gender affects human trust, confidence, and deception during strategic gameplay. The game is based on the research proposal "Trust and Deception: The Role of Robot Voice Gender in Strategic Gameplay."
+A simplified Texas Hold'em poker game that can be played against a Misty robot, designed to investigate the effects of robot voice gender on trust and deception during strategic gameplay.
+
+## Research Background
+
+This project was developed as part of a research study investigating "The Role of Robot Voice Gender in Trust and Deception during Strategic Gameplay." The game implements a simplified Texas Hold'em variant where players compete against a robot that exhibits deceptive behavior through facial expressions and verbal cues.
 
 ## Features
-- Simplified Texas Hold'em game with predetermined outcomes that can be controlled remotely
-- Robot voice gender switching (male/female) to study its effect on player behavior
-- Robot deception through facial expressions and verbal cues
-- Admin controls for researchers to manipulate game outcomes and robot behavior
-- Data collection for player responses and behaviors
-- Post-game questionnaire based on the research measures
 
-## Project Structure
-- `main.py` - Main entry point for the application
-- `models.py` - Data models for cards, deck, and game outcomes
-- `game_misty.py` - Main game class that integrates all components
-- `game_logic.py` - Game logic for determining outcomes and robot behavior
-- `ui_misty.py` - User interface components
-- `admin_panel.py` - Admin control panel for researchers
-- `questionnaire.py` - Post-game questionnaire implementation
-- `utils.py` - Utility functions for data tracking and analysis
-- `misty_interface.py` - Express the misty interface
-
-## Requirements
-- Python 3.6+
-- Tkinter (for GUI)
-- PIL/Pillow (for card images)
+- **Simplified Texas Hold'em**: All community cards revealed at once with a single betting phase
+- **Misty Robot Integration**: Connect to a physical Misty robot for lifelike interaction (optional)
+- **Voice Gender Options**: Choose between male and female robot voices
+- **Predetermined Hands**: 12 carefully balanced hand setups that ensure fair distribution of outcomes
+- **Deception Modeling**: The robot bluffs in 50% of rounds, displaying misleading facial expressions or verbal cues
+- **Data Collection**: Comprehensive tracking of game interactions and player responses
 
 ## Installation
-1. Clone the repository
-2. Install dependencies:
+
+### Prerequisites
+
+- Python 3.6 or higher
+- Tkinter (usually included with Python)
+- PIL (Python Imaging Library)
+- Network connection (if using a Misty robot)
+
+### Setup
+
+1. Clone the repository:
    ```
-   pip install pillow
+   git clone https://github.com/yourusername/texas-holdem-misty.git
+   cd texas-holdem-misty
    ```
-3. Run the application:
+
+2. Install required packages:
    ```
-   python main.py
+   pip install pillow requests
    ```
+
+3. Create a 'cards' directory for card images (optional - the game uses text placeholders if no images are found)
 
 ## Usage
-### Player Controls
-- **Fold**: Give up the current hand (robot wins)
-- **Bet 1**: Bet 1 chip
-- **Bet 2**: Bet 2 chips
-- **Next Round**: Proceed to the next round (enabled after a round completes)
 
-### Admin Controls (Research Mode)
-Press **Ctrl+A** to toggle the admin panel, which allows researchers to control:
-- Game outcomes (player wins, robot wins, tie)
-- Robot betting style (aggressive, neutral, conservative)
-- Robot betting amount
-- Robot bluffing behavior
-- Robot voice gender
+### Starting the Game
 
-### Game Flow
-1. The game consists of 2 sets of 6 rounds each
-2. The first set uses one robot voice gender
-3. After the first set, the voice gender changes for the second set
-4. Each round reveals community cards, player cards, and hidden robot cards
-5. Players can choose to bet or fold based on their hand and the robot's behavior
-6. After betting, the robot's cards are revealed and the winner is determined
-7. After all rounds, a questionnaire collects data about the player's experience
+Run the main.py file with the appropriate command-line arguments:
 
-## Data Collection
-- The game collects data about player betting behavior, responses to robot deception, and outcomes
-- Results are saved to a JSON file in the `results` directory
-- Questionnaire responses are saved to a JSON file in the `questionnaire_results` directory
+```
+python main.py [--misty] [--ip IP_ADDRESS] [--chips NUM_CHIPS] [--voice VOICE_GENDER]
+```
 
-## Research Variables Measured
-- **Trust**: Whether players follow the robot's cues
-- **Deception Detection**: Whether players can identify the robot's bluffing
-- **Deception Engagement**: How frequently players bluff against the robot
-- **Risk-Taking**: Betting behavior based on robot voice gender
-- **Confidence**: Self-reported confidence in decisions
+#### Command Line Arguments
 
-## Customization
-- Card images can be placed in a `cards` directory with filenames like `ah.png` (Ace of Hearts)
-- If no card images are found, simple placeholders will be created
+- `--misty`: Enable Misty robot integration (default: disabled)
+- `--ip`: IP address of the Misty robot (default: 192.168.0.137)
+- `--chips`: Initial number of chips for each player (default: 6)
+- `--voice`: Robot voice gender, 'male' or 'female' (default: random)
+
+### Example Commands
+
+- Run game without Misty integration:
+  ```
+  python main.py
+  ```
+
+- Run game with Misty integration:
+  ```
+  python main.py --misty --ip 192.168.1.100
+  ```
+
+- Run game with specific configuration:
+  ```
+  python main.py --chips 12 --voice female
+  ```
+
+## Gameplay
+
+1. **Game Setup**: Each player (human and robot) starts with the same number of chips.
+2. **Dealing**: In each round, players are dealt two hole cards, and three community cards are shown.
+3. **Betting**: The player can check, bet, or fold. The robot responds accordingly.
+4. **Resolution**: After betting, the best poker hand wins the pot.
+5. **Rounds**: The game consists of 6 rounds.
+6. **Post-Game**: After completing all rounds, a questionnaire appears to collect research data.
+
+## Project Structure
+
+- **main.py**: Entry point and command-line argument handling
+- **game_misty.py**: Main game logic and Misty integration
+- **game_logic.py**: Poker hand evaluation and predetermined hand setups
+- **misty_interface.py**: Communication with the Misty robot
+- **models.py**: Core classes for cards, deck, and hand evaluation
+- **ui_misty.py**: User interface components
+- **questionnaire.py**: Post-game questionnaire for data collection
+- **utils.py**: Utility functions for data management
+
+## Research Framework
+
+This implementation is based on a research protocol that investigates:
+
+1. **Trust Bias**: How voice gender affects players' trust in the robot
+2. **Deception Susceptibility**: Whether players are more deceived by male or female-voiced robots
+3. **Risk Assessment**: How voice gender influences betting behavior and risk-taking
+4. **Confidence**: Player confidence levels when playing against different robot voices
+
+## Acknowledgments
+
+- Developed for research on human-robot interaction during strategic gameplay
+- Uses a modified Texas Hold'em poker rule set for experimental purposes
+- Integrates with Misty Robotics platform for physical embodiment
