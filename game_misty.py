@@ -424,8 +424,21 @@ class TexasHoldemGame:
         elif self.use_misty:
             self.ui.add_misty_status("Misty robot not connected")
         
-        # Start the first round after a short delay
-        self.master.after(500, self.start_new_round)
+        # Show welcome message
+        self.ui.status_label.config(text="Welcome to the Texas Hold'em Poker Experiment!")
+        
+        # If using Misty, perform welcome action
+        if self.use_misty and self.misty and self.misty.misty.connected:
+            # Disable betting controls and next round button
+            self.ui.disable_betting_controls()
+            if hasattr(self.ui, 'next_round_button'):
+                self.ui.next_round_button.config(state=tk.DISABLED)
+            # Perform welcome action with Misty
+            welcome_thread = threading.Thread(target=self.misty.perform_welcome)
+            welcome_thread.start()
+            self.master.after(15000, self.start_new_round) 
+        else:
+            self.master.after(500, self.start_new_round)
     
     def start_new_round(self):
         """Start a new round of the game"""
@@ -435,6 +448,11 @@ class TexasHoldemGame:
         
         if self.player_chips <= 0:
             messagebox.showinfo("Game Over", "You've run out of chips!")
+            self.end_game()
+            return
+        
+        if self.robot_chips <= 0:
+            messagebox.showinfo("Game Over", "The robot has run out of chips!")
             self.end_game()
             return
         
@@ -453,8 +471,8 @@ class TexasHoldemGame:
             # Set Misty's voice gender
             self.misty.set_voice_gender(self.robot_voice_gender)
             
-            # Handle new round
-            threading.Thread(target=self.misty.handle_new_round).start()
+            # # Handle new round
+            # threading.Thread(target=self.misty.handle_new_round).start()
         
         # Reset the deck and deal new cards
         self.deck.reset()
@@ -1014,6 +1032,8 @@ class TexasHoldemGame:
             else:
                 self.misty.handle_tie()
                 self.misty.misty.say_text("It's a tie game! We're evenly matched.")
+            goodbye_thread = threading.Thread(target=self.misty.perform_goodbye)
+            goodbye_thread.start()
         
         # Show final results
         self.ui.status_label.config(text=final_message)

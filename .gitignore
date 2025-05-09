@@ -1,3 +1,7 @@
 # Ignore all files in the results directory
 results/
 **/results/
+
+# Ignore all files in SDK files
+Python-SDK/
+**/Python-SDK/

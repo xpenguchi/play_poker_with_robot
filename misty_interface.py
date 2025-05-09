@@ -3,13 +3,17 @@
 Misty Robot Interface for Texas Hold'em Poker Game
 Handles communication with the Misty robot for expressions, voice, and movement
 """
+import sys, os, time
+sys.path.append(os.path.join(os.path.join(os.path.dirname(__file__)), 'Python-SDK'))
+
+from mistyPy.Robot import Robot
+from mistyPy.Events import Events
 
 import requests
 import json
 import time
 import threading
 from enum import Enum
-import os
 import random
 
 class MistyExpression(Enum):
@@ -23,8 +27,8 @@ class MistyExpression(Enum):
 
 class MistyVoiceGender(Enum):
     """Enum for Misty's voice gender"""
-    MALE = "en-US-Chirp-HD-D"  # Male voice option
-    FEMALE = "en-US-Chirp-HD-F"  # Female voice option
+    MALE = "en-gb-x-gbb-local" # Male voice option
+    FEMALE = "en-gb-x-gba-local"  # Female voice option
 
 class MistyInterface:
     """Interface for controlling the Misty robot"""
@@ -41,6 +45,7 @@ class MistyInterface:
         self.base_url = f"http://{ip_address}/api"
         self.connected = False
         self.current_voice = MistyVoiceGender.MALE
+        self.robot = Robot(ip_address)
         
         # If requested, connect to Misty on initialization
         if connect_on_init:
@@ -115,29 +120,31 @@ class MistyInterface:
         Returns:
             bool: Whether the operation was successful
         """
-        if not self.connected:
-            print("Not connected to Misty")
-            return False
+        # if not self.connected:
+        #     print("Not connected to Misty")
+        #     return False
         
-        try:
-            # Determine which voice to use
-            selected_voice = self.current_voice
-            if not use_current_voice and voice is not None:
-                selected_voice = voice
+        # try:
+        #     # Determine which voice to use
+        #     selected_voice = self.current_voice
+        #     if not use_current_voice and voice is not None:
+        #         selected_voice = voice
             
-            # Use Misty's API to speak text
-            response = requests.post(
-                f"{self.base_url}/tts/speak",
-                json={
-                    "Text": text,
-                    "VoiceId": selected_voice.value,
-                    "UtteranceId": f"poker_game_{int(time.time())}"
-                }
-            )
-            return response.status_code == 200
-        except Exception as e:
-            print(f"Error making Misty speak: {e}")
-            return False
+        #     # Use Misty's API to speak text
+        #     response = requests.post(
+        #         f"{self.base_url}/tts/speak",
+        #         json={
+        #             "Text": text,
+        #             "VoiceId": selected_voice.value,
+        #             "UtteranceId": f"poker_game_{int(time.time())}"
+        #         }
+        #     )
+        #     return response.status_code == 200
+        # except Exception as e:
+        #     print(f"Error making Misty speak: {e}")
+        #     return False
+        selected_voice = self.current_voice
+        self.robot.speak(text, voice=selected_voice.value)
     
     def set_voice_gender(self, gender):
         """
@@ -169,25 +176,16 @@ class MistyInterface:
         Returns:
             bool: Whether the operation was successful
         """
+        self.robot.move_head(pitch, roll, yaw, velocity)
+
+    def move_arms(self, leftArmPosition=None, rightArmPosition=None, leftArmVelocity=None, rightArmVelocity=None, duration=None, units=None):
+        """
+        Move Misty's arms
+        """
         if not self.connected:
             print("Not connected to Misty")
             return False
-        
-        try:
-            # Use Misty's API to move head
-            response = requests.post(
-                f"{self.base_url}/head",
-                json={
-                    "Pitch": pitch,
-                    "Roll": roll,
-                    "Yaw": yaw,
-                    "Velocity": velocity
-                }
-            )
-            return response.status_code == 200
-        except Exception as e:
-            print(f"Error moving Misty's head: {e}")
-            return False
+        self.robot.move_arms(leftArmPosition, rightArmPosition, leftArmVelocity, rightArmVelocity, duration, units)
     
     def play_happy_animation(self):
         """
@@ -318,6 +316,7 @@ class MistyPokerPlayer:
         self.is_bluffing = False
         self.hand_quality = "average"  # can be "good", "average", or "bad"
         self.current_voice_gender = "male"
+        self.robot = Robot(ip_address)
     
     def set_voice_gender(self, gender):
         """
@@ -478,46 +477,119 @@ class MistyPokerPlayer:
         """Clean up and disconnect from Misty"""
         return self.misty.disconnect()
 
+    def perform_welcome(self):
+        """perform a welcome action"""
+        try:
+            # Set a happy expression
+            self.misty.set_expression(MistyExpression.HAPPY)
+            
+            # Move head to a friendly position
+            self.misty.move_head(pitch=10, yaw=15)
+            time.sleep(0.5)
+            self.misty.move_head(pitch=10, yaw=-15)
+            time.sleep(0.5)
+            self.misty.move_head(pitch=0, yaw=0)
+            
+            welcome_messages = [
+                "Hi I'm Misty. Welcome to our Texas Hold'em Poker experiment! I'm excited to play with you today.",
+                "Hello and welcome! I'm Misty, and I'll be your poker opponent for this experiment.",
+                "Hi I'm Misty. Welcome to our research study on poker gameplay. I hope you enjoy playing with me today."
+            ]
+            welcome_message = random.choice(welcome_messages)
+            self.misty.say_text(welcome_message)
+            self.misty.move_arms(90, 90, 100, 100)
+            self.misty.move_arms(0, 0, 50)
+            self.misty.move_arms(90, 90, 100, 100)
+            time.sleep(6)
 
-# Example usage if run as a script
-if __name__ == "__main__":
-    # Simple test of Misty poker player functionality
-    misty_player = MistyPokerPlayer()
+            # Additional instructions
+            instructions = "We will play 6 rounds of simplified Texas Hold'em. Let's get started!"
+            self.misty.say_text(instructions)
+        
+            # Set a neutral expression after the welcome
+            time.sleep(2)
+            self.misty.set_expression(MistyExpression.NEUTRAL)
+            
+        except Exception as e:
+            print(f"Error during welcome sequence: {e}")
+
+    def perform_goodbye(self):
+        """Perform a goodbye action"""
+        try:
+            # Set a happy expression
+            self.misty.set_expression(MistyExpression.HAPPY)
+            
+            # Move head to a friendly position
+            self.misty.move_head(pitch=20)
+            time.sleep(1)
+            self.misty.move_head(pitch=0)
+            
+            # Move head side to side
+            self.misty.move_head(yaw=10)
+            time.sleep(0.5)
+            self.misty.move_head(yaw=-10)
+            time.sleep(0.5)
+            self.misty.move_head(yaw=0)
+            
+            thank_you_messages = [
+                "Thank you for participating in our poker experiment! I really enjoyed playing with you.",
+                "The experiment is now complete. Thank you for your time and participation!",
+                "Thank you for being part of our research. Your participation is greatly appreciated."
+            ]
+            thank_you_message = random.choice(thank_you_messages)
+            self.misty.say_text(thank_you_message)
+            time.sleep(5)
+            
+            # Additional message
+            extra_message = "Please complete the questionnaire to help us with our research. Have a great day!"
+            self.misty.say_text(extra_message)
+            
+            # Set a neutral expression after the goodbye
+            time.sleep(3)
+            self.misty.set_expression(MistyExpression.NEUTRAL)
+            
+        except Exception as e:
+            print(f"Error during goodbye sequence: {e}")
+
+
+# if __name__ == "__main__":
+#     # Simple test of Misty poker player functionality
+#     misty_player = MistyPokerPlayer()
     
-    if misty_player.misty.connected:
-        print("Testing Misty poker player...")
+#     if misty_player.misty.connected:
+#         print("Testing Misty poker player...")
         
-        # Test male voice
-        misty_player.set_voice_gender("male")
-        misty_player.handle_new_round()
-        time.sleep(2)
+#         # Test male voice
+#         misty_player.set_voice_gender("male")
+#         misty_player.handle_new_round()
+#         time.sleep(2)
         
-        # Test female voice
-        misty_player.set_voice_gender("female")
-        misty_player.handle_new_round()
-        time.sleep(2)
+#         # Test female voice
+#         misty_player.set_voice_gender("female")
+#         misty_player.handle_new_round()
+#         time.sleep(2)
         
-        # Test bluffing with good hand
-        misty_player.set_hand_quality("good")
-        misty_player.set_bluffing(True)
-        misty_player.handle_betting_turn()
-        time.sleep(3)
+#         # Test bluffing with good hand
+#         misty_player.set_hand_quality("good")
+#         misty_player.set_bluffing(True)
+#         misty_player.handle_betting_turn()
+#         time.sleep(3)
         
-        # Test not bluffing with bad hand
-        misty_player.set_hand_quality("bad")
-        misty_player.set_bluffing(False)
-        misty_player.handle_betting_turn()
-        time.sleep(3)
+#         # Test not bluffing with bad hand
+#         misty_player.set_hand_quality("bad")
+#         misty_player.set_bluffing(False)
+#         misty_player.handle_betting_turn()
+#         time.sleep(3)
         
-        # Test win, loss, tie
-        misty_player.handle_win()
-        time.sleep(2)
-        misty_player.handle_loss()
-        time.sleep(2)
-        misty_player.handle_tie()
-        time.sleep(2)
+#         # Test win, loss, tie
+#         misty_player.handle_win()
+#         time.sleep(2)
+#         misty_player.handle_loss()
+#         time.sleep(2)
+#         misty_player.handle_tie()
+#         time.sleep(2)
         
-        # Clean up
-        misty_player.cleanup()
-    else:
-        print("Failed to connect to Misty. Check the IP address and try again.")
+#         # Clean up
+#         misty_player.cleanup()
+#     else:
+#         print("Failed to connect to Misty. Check the IP address and try again.")
