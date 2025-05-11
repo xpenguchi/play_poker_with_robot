@@ -104,8 +104,8 @@ def format_round_data(round_data):
     total_robot_bet = 0
     
     for round_info in round_data:
-        # Get round outcome
-        outcome = round_info.get("expected_outcome", None)
+        # Get round outcome - use actual_outcome instead of expected_outcome
+        outcome = round_info.get("actual_outcome", None)
         voice_gender = round_info.get("robot_voice_gender", "male")
         
         # Count by voice gender
@@ -114,7 +114,7 @@ def format_round_data(round_data):
         else:
             stats["female_voice_rounds"] += 1
         
-        # Track wins/losses
+        # Track wins/losses based on actual outcomes
         if outcome:
             if outcome == "PLAYER_WINS":
                 stats["player_wins"] += 1

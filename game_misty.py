@@ -470,9 +470,6 @@ class TexasHoldemGame:
         if self.use_misty and self.misty and self.misty.misty.connected:
             # Set Misty's voice gender
             self.misty.set_voice_gender(self.robot_voice_gender)
-            
-            # # Handle new round
-            # threading.Thread(target=self.misty.handle_new_round).start()
         
         # Reset the deck and deal new cards
         self.deck.reset()
@@ -503,10 +500,10 @@ class TexasHoldemGame:
             robot_message = get_robot_message(self.hand_setup, self.robot_is_bluffing)
             self.misty.misty.say_text(robot_message)
         
-        # Create new round data entry
+        # Create new round data entry - initialize properly with expected outcome as 'predetermined_outcome'
         self.current_round_data = {
             'round_num': self.round_num,
-            'expected_outcome': self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome),
+            'predetermined_outcome': self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome),
             'robot_bluffed': self.robot_is_bluffing,
             'player_folded': False,
             'player_bet_amount': 0,
@@ -635,8 +632,12 @@ class TexasHoldemGame:
             if self.robot_is_bluffing and self.expected_outcome != GameOutcome.ROBOT_WINS:
                 self.current_round_data['player_detected_bluff'] = False
 
-            if not isinstance(self.current_round_data['expected_outcome'], str):
-                self.current_round_data['expected_outcome'] = self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome)
+            # Ensure predetermined_outcome is properly stored
+            if not isinstance(self.current_round_data.get('predetermined_outcome'), str):
+                self.current_round_data['predetermined_outcome'] = self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome)
+            
+            # Add actual outcome
+            self.current_round_data['actual_outcome'] = "ROBOT_WINS"
             
             # Save the round data
             self.round_data.append(self.current_round_data)
@@ -896,13 +897,12 @@ class TexasHoldemGame:
                 threading.Thread(target=self.misty.handle_tie).start()
         
         # Save round data for analysis - with modification for the research study
-        # (using actual outcome for gameplay but tracking predetermined outcome for research)
+        # (using actual outcome for gameplay but tracking both outcomes for research)
         if hasattr(self, 'current_round_data'):
             # Add both outcomes to the data for later analysis - use strings instead of enum
             self.current_round_data['actual_outcome'] = actual_outcome.name if hasattr(actual_outcome, 'name') else str(actual_outcome)
-            # Make sure predetermined_outcome is already a string (in case it wasn't converted in start_new_round)
-            if 'predetermined_outcome' not in self.current_round_data or not isinstance(self.current_round_data['predetermined_outcome'], str):
-                self.current_round_data['predetermined_outcome'] = self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome)
+            # Save the predetermined/expected outcome too under a different key
+            self.current_round_data['predetermined_outcome'] = self.expected_outcome.name if hasattr(self.expected_outcome, 'name') else str(self.expected_outcome)
             self.round_data.append(self.current_round_data)
         
         self.current_pot = 0
@@ -929,6 +929,7 @@ class TexasHoldemGame:
         
         # Enable next round button
         self.ui.next_round_button.config(state=tk.NORMAL)
+
     
     # def alternate_voice_gender(self):
     #     """Alternate the robot's voice gender (as per the research proposal)"""
@@ -991,18 +992,19 @@ class TexasHoldemGame:
     
     def end_game(self):
         """End the game and show final results"""
+        # Format the round data to get updated accurate statistics
+        stats = format_round_data(self.round_data)
+        
         final_message = f"Game Over!\n\n"
-        final_message += f"Player wins: {self.player_wins}\n"
-        final_message += f"Robot wins: {self.robot_wins}\n"
-        final_message += f"Ties: {self.ties}\n\n"
+        final_message += f"Player wins: {stats['player_wins']}\n"
+        final_message += f"Robot wins: {stats['robot_wins']}\n"
+        final_message += f"Ties: {stats['ties']}\n\n"
         
         # Count how many times the robot bluffed
-        bluff_count = sum(1 for round_data in self.round_data if round_data.get('robot_bluffed', False))
+        bluff_count = stats['bluff_count']
         
         # Count how many times the player was deceived
-        deceived_count = sum(1 for round_data in self.round_data
-                             if round_data.get('robot_bluffed', False) and 
-                             not round_data.get('player_detected_bluff', True))
+        deceived_count = bluff_count - stats['player_detected_bluffs']
         
         if bluff_count > 0:
             final_message += f"Robot bluffed in {bluff_count} rounds\n"
@@ -1038,10 +1040,11 @@ class TexasHoldemGame:
         # Show final results
         self.ui.status_label.config(text=final_message)
         
-        # Display round results
+        # Display round results (based on actual outcomes, not predetermined)
         results_text = "Round results:\n"
-        for i, result in enumerate(self.round_results):
-            icon = "✅" if result is True else "❌" if result is False else "🟰"
+        for i, round_data in enumerate(self.round_data):
+            actual_outcome = round_data.get("actual_outcome", "TIE")
+            icon = "✅" if actual_outcome == "PLAYER_WINS" else "❌" if actual_outcome == "ROBOT_WINS" else "🟰"
             results_text += f"Round {i+1}: {icon}  "
             if (i+1) % 3 == 0:
                 results_text += "\n"
@@ -1054,13 +1057,13 @@ class TexasHoldemGame:
         
         # Save game results
         results_data = {
-            "player_wins": self.player_wins,
-            "robot_wins": self.robot_wins,
-            "ties": self.ties,
+            "player_wins": stats['player_wins'],
+            "robot_wins": stats['robot_wins'],
+            "ties": stats['ties'],
             "player_final_chips": self.player_chips,
             "robot_final_chips": self.robot_chips,
             "round_data": self.round_data,
-            "stats": format_round_data(self.round_data)
+            "stats": stats
         }
         save_game_results(results_data)
         
