@@ -28,8 +28,8 @@ This project was developed as part of a research study investigating "The Role o
 
 1. Clone the repository:
    ```
-   git clone https://github.com/yourusername/texas-holdem-misty.git
-   cd texas-holdem-misty
+   git clone https://github.com/xpenguchi/play_poker_with_robot.git
+   cd play_poker_with_robot
    ```
 
 2. Install required packages:

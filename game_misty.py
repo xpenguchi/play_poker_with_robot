@@ -498,6 +498,7 @@ class TexasHoldemGame:
             
             # Have Misty say something about its hand based on bluffing status
             robot_message = get_robot_message(self.hand_setup, self.robot_is_bluffing)
+            time.sleep(3)
             self.misty.misty.say_text(robot_message)
         
         # Create new round data entry - initialize properly with expected outcome as 'predetermined_outcome'

@@ -435,11 +435,37 @@ class MistyPokerPlayer:
                 ]
         
         # Say something based on the situation
+        time.sleep(1)
         self.misty.say_text(random.choice(phrases))
     
     def handle_win(self):
-        """Handle Misty winning a round"""
+        """Handle Misty winning a round with movement, expression and sound"""
+        # Play victory sound effect
+        try:
+            # Play a triumph sound (if available on Misty)
+            self.robot.play_audio("s_Triumph.wav")  # Or another victory sound available on Misty
+        except:
+            # Fallback if specific sound isn't available
+            print("Could not play victory sound - continuing without it")
+        
         self.misty.play_happy_animation()
+        
+        # Add victory arm movements - corrected understanding of arm positions
+        # For victory, move arms from natural resting position (90°) to slightly upward
+        self.misty.move_arms(60, 60, 60, 60)  # Arms slightly raised from resting position
+        time.sleep(0.6)
+        self.misty.move_arms(90, 90, 60, 60)  # Return to resting position
+        time.sleep(0.6)
+        self.misty.move_arms(60, 60, 60, 60)  # Arms slightly raised again
+        time.sleep(0.6)
+        self.misty.move_arms(90, 90, 60, 60)  # Return to resting position
+        
+        # Add head movement for celebration
+        self.misty.move_head(pitch=10, yaw=15)
+        time.sleep(0.5)
+        self.misty.move_head(pitch=10, yaw=-15)
+        time.sleep(0.5)
+        self.misty.move_head(pitch=0, yaw=0)
         
         phrases = [
             "I won this round!",
@@ -448,10 +474,29 @@ class MistyPokerPlayer:
             "Looks like I won this time."
         ]
         self.misty.say_text(random.choice(phrases))
-    
+
+    # Enhance the handle_loss method in the MistyPokerPlayer class
     def handle_loss(self):
-        """Handle Misty losing a round"""
+        """Handle Misty losing a round with movement, expression and sound"""
+        # Play defeat sound effect
+        try:
+            # Play a disappointment sound (if available on Misty)
+            self.robot.play_audio("s_Disappointment.wav")  # Or another sad sound available on Misty
+        except:
+            # Fallback if specific sound isn't available
+            print("Could not play defeat sound - continuing without it")
+        
         self.misty.play_sad_animation()
+        
+        # Add defeated arm movements - corrected understanding
+        # For defeat, move arms from resting position to forward (dejected)
+        self.misty.move_arms(50, 50, 30, 30)  # Arms forward/limp (dejected pose)
+        time.sleep(1)
+        
+        # Add head movement for disappointment
+        self.misty.move_head(pitch=-15)  # Look down in defeat
+        time.sleep(1)
+        self.misty.move_head(pitch=0)    # Return to neutral position
         
         phrases = [
             "You won this round.",
@@ -460,10 +505,35 @@ class MistyPokerPlayer:
             "Well played."
         ]
         self.misty.say_text(random.choice(phrases))
-    
+        
+        # Return arms to natural resting position
+        self.misty.move_arms(90, 90, 40, 40)  # Back to natural downward position
+
+    # Enhance the handle_tie method in the MistyPokerPlayer class
     def handle_tie(self):
-        """Handle a tie"""
+        """Handle a tie with movement, expression and sound"""
+        # Play tie sound effect
+        try:
+            # Play a neutral/curious sound (if available on Misty)
+            self.robot.play_audio("s_PhraseHmm.wav")  # Or another tie-appropriate sound available on Misty
+        except:
+            # Fallback if specific sound isn't available
+            print("Could not play tie sound - continuing without it")
+        
         self.misty.set_expression(MistyExpression.NEUTRAL)
+        
+        # Add tie gesture - corrected understanding
+        # For tie, small movement from resting to slightly forward and back
+        self.misty.move_arms(70, 70, 40, 40)  # Arms slightly forward for shrug
+        time.sleep(0.8)
+        self.misty.move_arms(90, 90, 40, 40)  # Back to resting position
+        
+        # Head tilt for "not sure" gesture
+        self.misty.move_head(roll=10)
+        time.sleep(0.8)
+        self.misty.move_head(roll=-10)
+        time.sleep(0.8)
+        self.misty.move_head(roll=0)
         
         phrases = [
             "It's a tie.",
@@ -472,6 +542,9 @@ class MistyPokerPlayer:
             "Neither of us wins this time."
         ]
         self.misty.say_text(random.choice(phrases))
+        
+        # Ensure arms are in natural resting position
+        self.misty.move_arms(90, 90, 40, 40)  # Natural downward position
     
     def cleanup(self):
         """Clean up and disconnect from Misty"""
@@ -498,9 +571,11 @@ class MistyPokerPlayer:
             welcome_message = random.choice(welcome_messages)
             self.misty.say_text(welcome_message)
             self.misty.move_arms(90, 90, 100, 100)
-            self.misty.move_arms(0, 0, 50)
+            time.sleep(2)
+            self.misty.move_arms(-20, -20, 1000)
+            time.sleep(2)
             self.misty.move_arms(90, 90, 100, 100)
-            time.sleep(6)
+            time.sleep(2)
 
             # Additional instructions
             instructions = "We will play 6 rounds of simplified Texas Hold'em. Let's get started!"

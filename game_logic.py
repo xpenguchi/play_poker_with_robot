@@ -489,7 +489,7 @@ def get_robot_expression(expected_outcome, is_bluffing):
     if is_bluffing:
         if expected_outcome == GameOutcome.ROBOT_WINS:
             # Robot has good cards but acts unsure
-            return "😕"
+            return random.choice(["😕", "😐"])
         else:
             # Robot has bad cards but acts confident
             return "😎"
